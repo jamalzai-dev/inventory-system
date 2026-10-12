@@ -1,7 +1,7 @@
 # Delivered changes
 
 - **Rebuilt:** index.html as a small document shell; seven legacy HTML URLs as compatibility redirects; js/db.js as a read-only compatibility guard; README.md.
-- **Added application modules:** app/data.js (validation, immutable operations, persistence/recovery), app/i18n.js (adjacent English/Pashto dictionary and formatting), app/ui.js (safe DOM components), app/main.js (navigation, reports, CRUD, backup workflows), app/preferences.js (pre-paint theme/language), app/styles.css (semantic themes and responsive RTL layout).
+- **Added application modules:** app/data.js (validation, immutable operations, persistence/recovery), app/i18n.js (adjacent English/Pashto dictionary and formatting), app/ui.js (safe DOM components), app/main.js (navigation, reports, CRUD, backup workflows), app/preferences.js (pre-paint theme/language), app/start.js (HTTP startup and direct-file export recovery), app/styles.css (semantic themes and responsive RTL layout).
 - **Added local tooling:** package.json, tools/serve.mjs, tests/data.test.js, tests/browser.mjs, .gitignore. No production dependencies or build step.
 - **Added PWA preparation:** manifest.webmanifest, assets/inventory.svg, unregistered service-worker.js shell-cache draft.
 - **Added documentation:** docs/AUDIT.md, MIGRATION.md, DEPLOYMENT.md, TESTING.md, CHANGES.md and archive/README-ARCHIVE.md.

@@ -4,6 +4,16 @@
 
 Run `npm start` (Node 22+; no dependency installation needed), then open http://127.0.0.1:8080. Keep that exact origin for subsequent use. ES modules need HTTP; opening index.html directly is no longer the supported workflow. The server binds loopback only and is a development preview, not an authenticated LAN service.
 
+Set `PORT` to an integer from 0–65535 to override the default; 0 asks the OS for an available port. PowerShell: `$env:PORT='8091'`, then `npm start`. The server prints its actual URL, rejects invalid values and reports port conflicts. Its document root follows the server script, so launching from another working directory does not break assets. No environment variable changes the loopback-only bind. A different port is a different browser storage origin; export/restore explicitly if moving records.
+
+## Browser and secure-context compatibility
+
+The supported code targets current Windows Chromium/Edge and Android Chromium browsers with ES modules, native dialog, Intl, localStorage, Blob downloads and File.text. The latest review executed Windows Edge and Pixel 7 **emulation in that desktop engine**. Physical Android Chrome/Edge, Android download-provider behavior, TalkBack, Windows Firefox and screen-reader speech remain unverified. Use device testing before production sign-off; viewport/user-agent/touch emulation is not a native Android test.
+
+Record creation previously depended directly on `crypto.randomUUID()`, a [secure-context API](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID). It now preserves UUID v4 format using cryptographic [getRandomValues](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues) when randomUUID is unavailable. A real insecure HTTP origin was exercised in an isolated browser using a synthetic hostname mapped to loopback. This compatibility fallback does not make HTTP transport private. Inventory over a real LAN still needs HTTPS, authentication, authorization and a central backend before production use.
+
+Native [showModal](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal) is supported by modern browsers and does not require HTTPS. Service workers/PWA installation remain the secure-context-dependent future work described below; no service worker is registered. Browser privacy settings or storage quotas can deny localStorage on either HTTP or HTTPS, and the app then presents recovery/error feedback.
+
 The supported frontend has no CDN calls, framework runtime or remote fonts. It uses locally available Segoe UI/Tahoma and optional installed Noto Naskh Arabic for shaped Pashto text. A reviewed, licensed Noto font can later be bundled to make typography identical across operating systems. Native print creates a localized full-inventory report. Downloads are JSON.
 
 Deploy only index.html, app/, assets/inventory.svg, manifest.webmanifest and optional compatibility redirect pages. **Do not publish archive/, tests/, tools/ or old js/ modules.** The development server blocks archive/tests/tools. The archived code is reference material with known obsolete UI/security patterns, not a second supported application.

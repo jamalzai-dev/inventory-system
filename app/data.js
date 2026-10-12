@@ -5,6 +5,15 @@ export const LEGACY_KEYS = ['ims_categories', 'ims_suppliers', 'ims_products', '
 export const emptyState = () => ({ materials: [], categories: [], suppliers: [], settings: { lang: 'en', dark: false } });
 export const stockStatus = m => m.quantity === 0 ? 'out' : m.quantity <= m.reorderLevel ? 'low' : 'good';
 export const clone = value => JSON.parse(JSON.stringify(value));
+export function createId(source = globalThis.crypto) {
+  if (typeof source.randomUUID === 'function') return source.randomUUID();
+  // getRandomValues remains available on HTTP origins; preserve UUID v4 format.
+  const bytes = source.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
 export class InventoryError extends Error {
   constructor(code, detail = '') { super(code); this.code = code; this.detail = detail; }
 }
@@ -40,6 +49,7 @@ export function validate(data) {
   return data;
 }
 export function parseBackup(text) {
+  if (typeof text !== 'string') fail('invalidBackup');
   if (text.length > 10 * 1024 * 1024) fail('fileTooLarge');
   let parsed;
   try { parsed = JSON.parse(text); } catch { fail('invalidBackup'); }

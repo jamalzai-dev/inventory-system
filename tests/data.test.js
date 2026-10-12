@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Repository, KEY, RECOVERY_KEY, LEGACY_KEYS, emptyState, validate, parseBackup, backupPayload, upsert, removeRecord, stockStatus } from '../app/data.js';
 import { messages, setLanguage, t } from '../app/i18n.js';
 import legacyDB from '../js/db.js';
+import { createId } from '../app/data.js';
 
 function fixture() {
   return { ...emptyState(), categories: [{id:'c',name:'کمپیوټر'}], suppliers: [{id:'s',name:'Supplier'}], materials: [{ id:'m', name:'  لپټاپ <script>  ', categoryId:'c', supplierId:'s', quantity:3, reorderLevel:2, price:100, location:'لابراتوار', condition:'Good', serial:'ABC-123', description:'  exact\ntext  ', purchaseDate:'2026-10-11' }] };
@@ -72,4 +73,12 @@ test('legacy seed and write entry points cannot overwrite records', () => {
   assert.equal(legacyDB.seed(),false);
   assert.throws(()=>legacyDB.saveProducts([]),/read-only/);
   assert.throws(()=>legacyDB.clear(),/read-only/);
+});
+test('UUID fallback retains v4 format and uses the supplied random bytes', () => {
+  const source = { getRandomValues: bytes => { bytes.fill(255); return bytes; } };
+  assert.equal(createId(source),'ffffffff-ffff-4fff-bfff-ffffffffffff');
+  assert.equal(createId({randomUUID:()=> 'native-uuid'}),'native-uuid');
+});
+test('malformed recovery payloads produce validation errors rather than type errors', () => {
+  for (const input of [undefined, null, 123, {}]) assert.throws(()=>parseBackup(input),/invalidBackup/);
 });

@@ -176,6 +176,8 @@ pre { max-block-size: 350px; white-space: pre-wrap; overflow: auto; overflow-wra
 .skip-link { position: fixed; inset-block-start: -100px; inset-inline-start: 16px; z-index: 200; padding: 12px 20px; background: var(--surface); }
 .skip-link:focus { inset-block-start: 12px; }
 #print-area { display: none; }
+.file-recovery { margin: 32px auto; padding: 24px; max-inline-size: min(760px,calc(100% - 32px)); }
+.file-recovery .button { margin-block-start: 20px; margin-inline-end: 10px; }
 :lang(ps) { font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif; line-height: 1.85; letter-spacing: normal; }
 :lang(ps) h1, :lang(ps) h2, :lang(ps) h3 { letter-spacing: normal; line-height: 1.65; }
 :lang(ps) .brand small { font-size: 10px; }

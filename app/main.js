@@ -1,4 +1,4 @@
-import { KEY, RECOVERY_KEY, LEGACY_KEYS, Repository, emptyState, stockStatus, upsert, removeRecord, parseBackup, backupPayload, InventoryError } from './data.js';
+import { KEY, RECOVERY_KEY, LEGACY_KEYS, Repository, emptyState, stockStatus, upsert, removeRecord, parseBackup, backupPayload, InventoryError, createId } from './data.js';
 import { t, setLanguage, number, money, date } from './i18n.js';
 import { el, text, button, userText, localize, table } from './ui.js';
 
@@ -71,6 +71,7 @@ function toggleMenu(force) {
   const open = force ?? !sidebar.classList.contains('open');
   sidebar.classList.toggle('open', open);
   menu.setAttribute('aria-expanded', String(open));
+  if (open) nav.querySelector('[aria-current="page"]')?.focus();
 }
 function navigate(next) {
   page = next; query = ''; categoryFilter = ''; statusFilter = '';
@@ -279,7 +280,7 @@ function openRecord(collection, id) {
       const invalid = Object.values(controls).find(input => input.required && !input.value.trim());
       if (invalid) { invalid.setAttribute('aria-invalid', 'true'); invalid.focus(); throw new InventoryError('required'); }
       if (controls.email?.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(controls.email.value)) { controls.email.setAttribute('aria-invalid', 'true'); controls.email.focus(); throw new InventoryError('invalidEmail'); }
-      const record = { ...old, id: old?.id || crypto.randomUUID(), createdAt: old?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const record = { ...old, id: old?.id || createId(), createdAt: old?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
       for (const [key, input] of Object.entries(controls)) {
         if (['quantity','reorderLevel','price'].includes(key)) {
           if (input.validity.badInput || input.validity.rangeUnderflow || input.validity.rangeOverflow || input.validity.stepMismatch) { input.setAttribute('aria-invalid','true'); input.focus(); throw new InventoryError(key === 'price' ? 'invalidNumber' : 'wholeNumber'); }

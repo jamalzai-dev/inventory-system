@@ -3,15 +3,20 @@
 import { createRequire } from 'node:module';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
 const page = await context.newPage();
 const errors=[];
+const failedRequests=[];
 page.on('pageerror',e=>errors.push(e.message));
 page.on('console',m=>{if(m.type()==='error') errors.push(m.text());});
-const base='http://127.0.0.1:8080';
+page.on('requestfailed',r=>failedRequests.push(`${r.url()} ${r.failure()?.errorText}`));
+page.on('response',r=>{if(r.status()>=400)failedRequests.push(`${r.status()} ${r.url()}`);});
+const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:8080';
 const key='university_it_inventory_v2';
 const fixture={categories:[{id:'c',name:'Computers',description:'University equipment'},{id:'c2',name:'شبکې',description:'Network equipment'}],suppliers:[{id:'s',name:'Kabul Technology',contact:'احمد',phone:'+93 700 123 456',email:'it@example.edu',address:'Kabul'}],materials:[
  {id:'m1',name:'Dell Latitude 5440',categoryId:'c',supplierId:'s',quantity:12,reorderLevel:3,price:52000,location:'IT Lab 01',condition:'Good',serial:'UNI-LT-0042',responsible:'احمد',purchaseDate:'2026-09-01',description:'Teaching laptops',createdAt:'2026-10-10T10:00:00Z'},
@@ -106,6 +111,9 @@ try {
  await check('blocked storage access presents recovery without crashing',async()=>{
   const blockedContext=await browser.newContext();await blockedContext.addInitScript(()=>{Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Blocked','SecurityError');}});});const blocked=await blockedContext.newPage();const blockedErrors=[];blocked.on('pageerror',e=>blockedErrors.push(e.message));await blocked.goto(base);await blocked.locator('h1').waitFor();assert.ok((await blocked.locator('[role=alert]').first().innerText()).includes('Stored data'));assert.deepEqual(blockedErrors,[]);await blockedContext.close();
  });
+ await check('direct-file recovery exports original records without changing them',async()=>{
+  const filePage=await context.newPage();const fileErrors=[];filePage.on('pageerror',e=>fileErrors.push(e.message));await filePage.goto(pathToFileURL(resolve('index.html')).href);await filePage.evaluate(({key,fixture})=>localStorage.setItem(key,JSON.stringify(fixture)),{key,fixture});await filePage.reload();assert.equal(await filePage.locator('.file-recovery').count(),1);const event=filePage.waitForEvent('download');await filePage.locator('.file-recovery button').first().click();await (await event).saveAs('tests/artifacts/file-recovery.json');assert.deepEqual(await filePage.evaluate(key=>JSON.parse(localStorage.getItem(key)),key),fixture);assert.deepEqual(fileErrors,[]);await filePage.close();
+ });
  await check('text and input-border token contrast meets selected WCAG ratios',async()=>{
   for(const dark of [false,true]){
    await page.evaluate(dark=>document.documentElement.dataset.theme=dark?'dark':'light',dark);
@@ -114,8 +122,8 @@ try {
    });for(const result of ratios)assert.ok(result.ratio>=result.min,JSON.stringify(result));
   }
  });
- assert.deepEqual(errors,[]);checks.push('no browser console or page errors');
- await writeFile('tests/artifacts/browser-results.json',JSON.stringify({checks,errors},null,2));
+ assert.deepEqual(errors,[]);assert.deepEqual(failedRequests,[]);checks.push('no browser console, page errors or failed resource requests');
+ await writeFile('tests/artifacts/browser-results.json',JSON.stringify({browser:browser.version(),base,checks,errors,failedRequests},null,2));
  console.log(`${checks.length} browser checks passed`);
 } finally { await browser.close(); }
 
