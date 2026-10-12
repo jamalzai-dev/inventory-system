@@ -147,6 +147,10 @@ textarea { resize: vertical; }
 .backup-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; margin-block-end: 20px; }
 #page-content > .card + .card { margin-block-start: 20px; }
 .stack { display: grid; gap: 14px; }
+.removal-rows { margin-block-start: 18px; }
+.removal-rows .field { margin-block: 12px; }
+.category-print-controls { align-items: center; padding-inline: 0; padding-block-start: 0; }
+#page-actions:has(#remove-materials) { display: flex; flex-wrap: wrap; gap: 8px; }
 .settings { max-inline-size: 850px; }
 .setting-row { padding: 24px; display: flex; justify-content: space-between; align-items: center; gap: 26px; border-block-end: 1px solid var(--line); }
 .setting-row:last-child { border: 0; }

@@ -79,6 +79,27 @@ export function removeRecord(data, collection, id) {
   next[collection] = next[collection].filter(x => x.id !== id);
   return validate(next);
 }
+// Validate the entire batch before changing a clone; repeated IDs are combined.
+export function deductStock(data, entries) {
+  if (!Array.isArray(entries) || !entries.length) fail('removalEmpty');
+  const totals = new Map();
+  for (const entry of entries) {
+    if (!entry || !Number.isSafeInteger(entry.quantity) || entry.quantity <= 0) fail('removalQuantity');
+    if (!data.materials.some(material => material.id === entry.id)) fail('removalMissing');
+    const total = (totals.get(entry.id) || 0) + entry.quantity;
+    if (!Number.isSafeInteger(total) || total > data.materials.find(material => material.id === entry.id).quantity) fail('removalExcess');
+    totals.set(entry.id, total);
+  }
+  const next = clone(data);
+  const updatedAt = new Date().toISOString();
+  for (const material of next.materials) {
+    if (totals.has(material.id)) {
+      material.quantity -= totals.get(material.id);
+      material.updatedAt = updatedAt;
+    }
+  }
+  return validate(next);
+}
 export class Repository {
   constructor(storage) { this.storage = storage; this.raw = null; this.blocked = false; }
   load() {

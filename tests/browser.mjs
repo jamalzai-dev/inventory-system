@@ -31,7 +31,7 @@ try {
  await page.locator('h1').waitFor();
  await check('existing records render without mutation',async()=>{assert.equal(await page.locator('tbody tr').count(),3);assert.deepEqual(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),key),fixture);});
  await check('category create / edit / search / delete',async()=>{
-  await page.locator('nav [data-page="categories"]').click(); await page.locator('#page-actions button').click();
+  await page.locator('nav [data-page="categories"]').click(); await page.locator('#page-actions .primary').click();
   await page.locator('#field-name').fill('  نوې کټګوري  '); await page.locator('#field-description').fill('  unchanged description  '); await page.locator('dialog form [type=submit]').click();
   await page.locator('input[type=search]').fill('نوې'); assert.equal(await page.locator('tbody tr').count(),1);
   await page.locator('tbody button').first().click(); assert.equal(await page.locator('#field-name').inputValue(),'  نوې کټګوري  ');
@@ -40,14 +40,14 @@ try {
   assert.equal((await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).categories.length,key)),2);
  });
  await check('supplier create / edit / Unicode search / delete',async()=>{
-  await page.locator('nav [data-page="suppliers"]').click(); await page.locator('#page-actions button').click();
+  await page.locator('nav [data-page="suppliers"]').click(); await page.locator('#page-actions .primary').click();
   await page.locator('#field-name').fill('نوی عرضه کوونکی'); await page.locator('#field-phone').fill('+93 700 111 222'); await page.locator('#field-email').fill('bad-email'); await page.locator('dialog form [type=submit]').click(); assert.equal(await page.locator('#field-email').getAttribute('aria-invalid'),'true');
   await page.locator('#field-email').fill('test@example.edu'); await page.locator('dialog form [type=submit]').click();
   await page.locator('input[type=search]').fill('نوی'); await page.locator('tbody button').first().click(); await page.locator('#field-contact').fill('نوی کس'); await page.locator('dialog form [type=submit]').click();
   assert.ok((await page.locator('tbody').innerText()).includes('نوی کس')); await page.locator('tbody button').last().click(); await page.locator('.confirm-dialog .primary').click();
  });
  await check('material validation, draft preservation, safe rendering and persistence',async()=>{
-  await page.locator('nav [data-page="materials"]').click(); await page.locator('#page-actions button').click();
+  await page.locator('nav [data-page="materials"]').click(); await page.locator('#page-actions .primary').click();
   await page.locator('#field-name').fill('<img src=x onerror=alert(1)> پښتو'); await page.locator('#field-location').fill('  لابراتوار  '); await page.locator('#field-categoryId').selectOption('c2'); await page.locator('#field-supplierId').selectOption('s');
   await page.locator('#field-quantity').fill('-1'); await page.locator('dialog form [type=submit]').click(); assert.equal(await page.locator('#field-quantity').getAttribute('aria-invalid'),'true');
   await page.locator('#field-quantity').fill('7'); await page.locator('dialog .language-button').click(); await page.locator('dialog .theme-button').click();
@@ -60,7 +60,7 @@ try {
  });
  await check('referenced category deletion is blocked',async()=>{await page.locator('nav [data-page="categories"]').click();await page.locator('tbody tr').first().locator('button').last().click();assert.ok(await page.locator('[role=alert]').first().isVisible());assert.equal(await page.locator('.confirm-dialog').isVisible(),false);});
  await check('native dialog focus containment and Escape restoration',async()=>{
-  await page.locator('#page-actions button').click(); for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>!!document.activeElement.closest('dialog')),true);} await page.keyboard.press('Escape');assert.equal(await page.locator('dialog.record-dialog').isVisible(),false);assert.equal(await page.evaluate(()=>document.activeElement.closest('#page-actions')!==null),true);
+  await page.locator('#page-actions .primary').click(); for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>!!document.activeElement.closest('dialog')),true);} await page.keyboard.press('Escape');assert.equal(await page.locator('dialog.record-dialog').isVisible(),false);assert.equal(await page.evaluate(()=>document.activeElement.closest('#page-actions')!==null),true);
  });
  await check('backup export, invalid restore and confirmed valid restore',async()=>{
   await page.locator('nav [data-page="backup"]').click(); const downloadEvent=page.waitForEvent('download');await page.getByRole('button',{name:'Download a backup',exact:true}).click();const download=await downloadEvent;await download.saveAs('tests/artifacts/export.json');
@@ -71,14 +71,14 @@ try {
   await page.evaluate(()=>localStorage.setItem('ims_orders','[{"note":"<img src=x onerror=alert(1)>","totalValue":50}]')); await page.getByRole('button',{name:'Inspect legacy records',exact:true}).click();await page.locator('details summary').click();assert.equal(await page.locator('.legacy-records img').count(),0);assert.ok((await page.locator('pre').innerText()).includes('totalValue'));await page.keyboard.press('Escape');
  });
  await check('failed browser save retains draft, memory and primary records',async()=>{
-  await page.goto(base+'/#categories');await page.locator('#page-actions button').click();await page.locator('#field-name').fill('Unsaved draft');
+  await page.goto(base+'/#categories');await page.locator('#page-actions .primary').click();await page.locator('#field-name').fill('Unsaved draft');
   await page.evaluate(()=>{window.originalSet=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='university_it_inventory_v2')throw new DOMException('Quota','QuotaExceededError');return window.originalSet.call(this,key,value);};});
   await page.locator('dialog form [type=submit]').click();assert.equal(await page.locator('#field-name').inputValue(),'Unsaved draft');assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).categories.length,key),2);
   await page.evaluate(()=>{Storage.prototype.setItem=window.originalSet;});await page.keyboard.press('Escape');assert.equal(await page.locator('tbody tr').count(),2);
  });
  await check('stale second-tab write is blocked',async()=>{
-  const second=await context.newPage();await second.goto(base+'/#categories');await page.locator('#page-actions button').click();await page.locator('#field-name').fill('Committed in first tab');await page.locator('dialog form [type=submit]').click();
-  await second.locator('#page-actions button').click();await second.locator('#field-name').fill('Stale draft');await second.locator('dialog form [type=submit]').click();assert.ok((await second.locator('#form-errors').innerText()).includes('another tab'));await second.close();
+  const second=await context.newPage();await second.goto(base+'/#categories');await page.locator('#page-actions .primary').click();await page.locator('#field-name').fill('Committed in first tab');await page.locator('dialog form [type=submit]').click();
+  await second.locator('#page-actions .primary').click();await second.locator('#field-name').fill('Stale draft');await second.locator('dialog form [type=submit]').click();assert.ok((await second.locator('#form-errors').innerText()).includes('another tab'));await second.close();
   await page.evaluate(({key,fixture})=>localStorage.setItem(key,JSON.stringify(fixture)),{key,fixture});await page.reload();
  });
  await check('clear is confirmed and recovery restores previous records',async()=>{
@@ -101,7 +101,7 @@ try {
     assert.equal(await page.locator('input:not([aria-label]):not([id]),select:not([aria-label]):not([id])').count(),0);
    }
    await page.goto(base+'/#dashboard');await page.screenshot({path:`tests/artifacts/dashboard-${width}-${lang}-${dark?'dark':'light'}.png`,fullPage:true});
-   await page.goto(base+'/#materials');await page.locator('#page-actions button').click();assert.equal(await page.evaluate(()=>document.querySelector('dialog').getBoundingClientRect().width<=innerWidth),true);await page.screenshot({path:`tests/artifacts/dialog-${width}-${lang}-${dark?'dark':'light'}.png`,fullPage:true});await page.keyboard.press('Escape');
+   await page.goto(base+'/#materials');await page.locator('#page-actions .primary').click();assert.equal(await page.evaluate(()=>document.querySelector('dialog').getBoundingClientRect().width<=innerWidth),true);await page.screenshot({path:`tests/artifacts/dialog-${width}-${lang}-${dark?'dark':'light'}.png`,fullPage:true});await page.keyboard.press('Escape');
   }
  });
  await check('corrupted storage recovery preserves raw bytes',async()=>{

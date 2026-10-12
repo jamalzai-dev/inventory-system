@@ -23,7 +23,7 @@ async function check(name, action, options={}) {
 await mkdir('tests/artifacts',{recursive:true});
 try {
   await check('record creation works when secure-context randomUUID is unavailable',async page=>{
-    await page.evaluate(()=>Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true}));await page.goto(base+'/#categories');await page.locator('#page-actions button').click();await page.locator('#field-name').fill('HTTP-compatible category');await page.locator('dialog form [type=submit]').click();
+    await page.evaluate(()=>Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true}));await page.goto(base+'/#categories');await page.locator('#page-actions .primary').click();await page.locator('#field-name').fill('HTTP-compatible category');await page.locator('dialog form [type=submit]').click();
     assert.equal(await page.locator('.record-dialog').isVisible(),false,await page.locator('#form-errors').textContent());
     const id=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).categories.at(-1).id,key);assert.match(id,/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
   });
@@ -53,11 +53,11 @@ try {
       }
       await page.goto(base+'/#materials');await page.locator('tbody button').first().tap();assert.equal(await page.locator('#field-serial').getAttribute('dir'),'ltr');assert.equal(await page.locator('#field-name').getAttribute('dir'),'auto');await page.locator('#field-responsible').fill('مسؤل ABC');await page.locator('dialog form [type=submit]').tap();
     }
-    await page.goto(base+'/#categories');await page.locator('#page-actions button').tap();await page.locator('#field-name').fill('Android category');await page.locator('dialog form [type=submit]').tap();await page.locator('input[type=search]').fill('Android category');await page.locator('tbody button').last().tap();await page.locator('.confirm-dialog .primary').tap();
+    await page.goto(base+'/#categories');await page.locator('#page-actions .primary').tap();await page.locator('#field-name').fill('Android category');await page.locator('dialog form [type=submit]').tap();await page.locator('input[type=search]').fill('Android category');await page.locator('tbody button').last().tap();await page.locator('.confirm-dialog .primary').tap();
     await page.screenshot({path:'tests/artifacts/android-ps-dark.png',fullPage:true});
   },devices['Pixel 7']);
   await check('short mobile viewport keeps form footer reachable and every control labelled',async page=>{
-    await page.goto(base+'/#materials');await page.locator('#page-actions button').click();
+    await page.goto(base+'/#materials');await page.locator('#page-actions .primary').click();
     for(const input of await page.locator('dialog input,dialog select,dialog textarea').all())assert.equal(await input.evaluate(n=>n.labels.length>0),true);
     await page.locator('#field-description').fill('Keyboard-height viewport');await page.locator('dialog form [type=submit]').scrollIntoViewIfNeeded();const rect=await page.locator('dialog form [type=submit]').boundingBox();assert.ok(rect.y>=0&&rect.y+rect.height<=400);await page.keyboard.press('Escape');
   },{viewport:{width:360,height:400}});
@@ -69,7 +69,7 @@ try {
   const httpBrowser=await chromium.launch({channel:process.env.BROWSER_CHANNEL || 'msedge',headless:true,args:['--host-resolver-rules=MAP inventory.test 127.0.0.1','--no-proxy-server']});
   try {
     const context=await httpBrowser.newContext();observe(context);const page=await context.newPage();const url=new URL(base);url.hostname='inventory.test';await page.goto(url.href);await page.locator('h1').waitFor();
-    assert.equal(await page.evaluate(()=>isSecureContext),false);assert.equal(await page.evaluate(()=>typeof crypto.randomUUID),'undefined');await page.goto(url.href+'#categories');await page.locator('#page-actions button').click();await page.locator('#field-name').fill('HTTP origin');await page.locator('dialog form [type=submit]').click();assert.equal(await page.locator('.record-dialog').isVisible(),false);assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).categories.length,key),1);
+    assert.equal(await page.evaluate(()=>isSecureContext),false);assert.equal(await page.evaluate(()=>typeof crypto.randomUUID),'undefined');await page.goto(url.href+'#categories');await page.locator('#page-actions .primary').click();await page.locator('#field-name').fill('HTTP origin');await page.locator('dialog form [type=submit]').click();assert.equal(await page.locator('.record-dialog').isVisible(),false);assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).categories.length,key),1);
     checks.push('genuine insecure HTTP origin supports record creation');console.log('PASS genuine insecure HTTP origin supports record creation');
   } finally { await httpBrowser.close(); }
   assert.deepEqual(errors,[]);assert.deepEqual(failedRequests,[]);checks.push('no console errors or failed resource requests across QA contexts');

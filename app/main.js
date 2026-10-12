@@ -1,4 +1,4 @@
-import { KEY, RECOVERY_KEY, LEGACY_KEYS, Repository, emptyState, stockStatus, upsert, removeRecord, parseBackup, backupPayload, InventoryError, createId } from './data.js';
+import { KEY, RECOVERY_KEY, LEGACY_KEYS, Repository, emptyState, stockStatus, upsert, removeRecord, parseBackup, backupPayload, InventoryError, createId, deductStock } from './data.js';
 import { t, setLanguage, number, money, date } from './i18n.js';
 import { el, text, button, userText, localize, table } from './ui.js';
 
@@ -15,6 +15,7 @@ const pages = ['dashboard', 'materials', 'categories', 'suppliers', 'reports', '
 let page = pages.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard';
 let query = '', categoryFilter = '', statusFilter = '';
 let selectedBackupFile = null;
+let reportCategory = '', refreshRemovalLabels = null;
 let opener, noticeTimer, pendingConfirmation;
 const icon = (value) => el('span', { class: 'icon', 'aria-hidden': 'true' }, value);
 const brand = () => el('div', { class: 'brand' }, el('span', { class: 'brand-mark', 'aria-hidden': 'true' }, '▦'), el('div', {}, text('brand', 'strong'), text('university', 'small')));
@@ -93,6 +94,7 @@ function savePreferences() {
   document.querySelectorAll('.language-button').forEach(node => { node.textContent = prefs.lang === 'en' ? 'پښتو' : 'English'; });
   document.querySelectorAll('.theme-button').forEach(node => node.setAttribute('aria-pressed', String(prefs.dark)));
   localize(); renderPage();
+  refreshRemovalLabels?.();
   if (focusPosition >= 0) document.querySelectorAll('.setting-row')[focusPosition]?.querySelectorAll('button')[focusButton]?.focus();
   document.title = t('app');
 }
@@ -154,6 +156,14 @@ function renderRecords(collection) {
   content.append(el('section', { class: 'card' }, filters, result, count)); draw();
 }
 function renderReports() {
+  const categorySelect = el('select', { id: 'print-category' }, el('option', { value: '' }, t('choose')), state.categories.map(c => el('option', { value: c.id }, c.name)));
+  categorySelect.value = reportCategory;
+  categorySelect.addEventListener('change', () => { reportCategory = categorySelect.value; });
+  content.append(el('div', { class: 'filters category-print-controls' }, text('categoryId', 'label', { for: 'print-category' }), categorySelect,
+    button('printCategory', () => {
+      if (!reportCategory) { reportError(new InventoryError('selectPrintCategory')); categorySelect.focus(); return; }
+      printReport(reportCategory);
+    })));
   const status = el('dl', { class: 'summary-list' }, ['good','low','out'].map(key => [text(key, 'dt'), el('dd', {}, number(state.materials.filter(m => stockStatus(m) === key).length))]));
   const groups = el('dl', { class: 'summary-list' }, state.categories.map(c => [el('dt', {}, userText(c.name)), el('dd', {}, number(state.materials.filter(m => m.categoryId === c.id).length))]));
   if (!state.categories.length) groups.append(text('empty', 'p'));
@@ -228,7 +238,8 @@ function renderPage() {
   if (['dashboard','materials','categories','suppliers'].includes(page)) {
     const collection = page === 'dashboard' ? 'materials' : page;
     actions.append(button({materials:'addMaterial',categories:'addCategory',suppliers:'addSupplier'}[collection], () => openRecord(collection), 'primary', { disabled: repository.blocked }));
-  } else if (page === 'reports') actions.append(button('print', printReport));
+    if (page === 'materials') actions.append(button('removeMaterials', openRemoval, '', { id: 'remove-materials', disabled: repository.blocked }));
+  } else if (page === 'reports') actions.append(button('print', () => printReport()));
   content.replaceChildren();
   if (page === 'dashboard') renderDashboard();
   else if (['materials','categories','suppliers'].includes(page)) renderRecords(page);
@@ -237,11 +248,88 @@ function renderPage() {
   else renderSettings();
 }
 function closeDialog() { dialog.close(); }
-dialog.addEventListener('close', () => { if (opener?.isConnected) opener.focus(); else pageTitle.focus(); });
+dialog.addEventListener('close', () => { refreshRemovalLabels = null; if (opener?.isConnected) opener.focus(); else pageTitle.focus(); });
 function openDialog(title, body) {
   opener = document.activeElement;
   dialog.replaceChildren(el('div', { class: 'dialog-heading' }, text(title, 'h2', { id: 'dialog-title' }), el('div', { class: 'dialog-actions' }, languageButton(), themeButton(), button('close', closeDialog, 'small'))), body);
   dialog.showModal();
+}
+function openRemoval() {
+  if (repository.blocked) { reportError(new InventoryError('storageUnreadable')); return; }
+  const selected = new Map();
+  let reviewing = false, completed = false;
+  const errors = el('div', { id: 'removal-errors', class: 'notice error', role: 'alert', hidden: true });
+  const search = el('input', { id: 'removal-search', type: 'search', 'data-placeholder': 'searchHint', placeholder: t('searchHint') });
+  const select = el('select', { id: 'removal-material' });
+  const available = el('p', { class: 'muted', 'aria-live': 'polite' });
+  const rows = el('div', { class: 'stack removal-rows' });
+  const unit = material => typeof material.unit === 'string' && material.unit.trim() ? userText(material.unit) : text('units');
+  function showAvailable() {
+    const material = state.materials.find(m => m.id === select.value);
+    available.replaceChildren(...(material ? [text('availableQuantity'), ': ', number(material.quantity), ' ', unit(material)] : []));
+  }
+  function filterOptions() {
+    const previous = select.value;
+    const needle = search.value.trim().toLocaleLowerCase();
+    const matches = state.materials.filter(m => [m.name, m.serial, m.location, categoryName(m.categoryId)].some(value => String(value || '').toLocaleLowerCase().includes(needle)));
+    select.replaceChildren(el('option', { value: '' }, t('selectMaterial')), ...matches.map(m => el('option', { value: m.id }, `${m.name} · ${m.serial || m.location}`)));
+    select.value = matches.some(m => m.id === previous) ? previous : '';
+    showAvailable();
+  }
+  search.addEventListener('input', filterOptions);
+  select.addEventListener('change', showAvailable);
+  function addSelection() {
+    const material = state.materials.find(m => m.id === select.value);
+    if (!material) { reportError(new InventoryError('removalEmpty'), errors); select.focus(); return; }
+    if (selected.has(material.id)) { selected.get(material.id).input.focus(); return; }
+    errors.hidden = true;
+    const inputId = `removal-quantity-${selected.size}-${createId()}`;
+    const input = el('input', { id: inputId, type: 'number', min: '1', max: material.quantity, step: '1', required: true, 'aria-describedby': 'removal-errors' });
+    const stock = el('p', { class: 'muted' }, text('availableQuantity'), ': ', number(material.quantity), ' ', unit(material));
+    const row = el('section', { class: 'card card-body', 'data-removal-id': material.id }, el('h3', {}, userText(material.name)), el('small', {}, userText(material.serial || material.location)), stock,
+      el('div', { class: 'field' }, el('label', { for: inputId }, text('removalAmount')), input),
+      button('excludeRemoval', () => { selected.delete(material.id); row.remove(); select.focus(); }, 'small'));
+    selected.set(material.id, { input, stock, material }); rows.append(row); input.focus();
+  }
+  const form = el('form', { novalidate: true, id: 'removal-form' }, text('removalHint', 'p', { class: 'muted' }), errors,
+    el('div', { class: 'form-grid' }, el('div', { class: 'field' }, text('search', 'label', { for: 'removal-search' }), search),
+      el('div', { class: 'field' }, text('material', 'label', { for: 'removal-material' }), select)), available,
+    button('selectMaterial', addSelection, '', { id: 'add-removal' }), rows,
+    el('div', { class: 'dialog-footer' }, button('cancel', closeDialog), el('button', { type: 'submit', class: 'button primary' }, text('reviewRemoval'))));
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    if (reviewing || completed) return;
+    errors.hidden = true;
+    try {
+      const entries = [...selected].map(([id, { input }]) => {
+        input.removeAttribute('aria-invalid');
+        if (!input.value.trim() || !Number.isSafeInteger(Number(input.value)) || Number(input.value) <= 0 || input.validity.badInput) {
+          input.setAttribute('aria-invalid', 'true'); input.focus(); throw new InventoryError('removalQuantity');
+        }
+        return { id, quantity: Number(input.value) };
+      });
+      const preview = deductStock(state, entries);
+      const summary = el('div', {}, text('removalReviewHint', 'p'), table(['material','availableQuantity','removalAmount','remainingQuantity'], entries.map(entry => {
+        const m = state.materials.find(m => m.id === entry.id);
+        return [userText(m.name), el('span', {}, number(m.quantity), ' ', unit(m)), number(entry.quantity), number(preview.materials.find(m => m.id === entry.id).quantity)];
+      })));
+      reviewing = true;
+      confirmDialog.addEventListener('close', () => { reviewing = false; }, { once: true });
+      confirmAction('confirmRemoval', summary, 'confirmRemoval', () => {
+        if (completed) return;
+        completed = true;
+        try { commit(deductStock(state, entries), 'removalSaved'); }
+        catch (error) { completed = false; throw error; }
+        closeDialog();
+      });
+    } catch (error) { reportError(error, errors); }
+  });
+  openDialog('removeMaterials', form);
+  refreshRemovalLabels = () => {
+    filterOptions();
+    for (const { stock, material } of selected.values()) stock.replaceChildren(text('availableQuantity'), ': ', number(material.quantity), ' ', unit(material));
+  };
+  filterOptions(); search.focus();
 }
 const recordFields = {
   materials: ['name','categoryId','quantity','reorderLevel','location','condition','serial','responsible','supplierId','price','purchaseDate','description'],
@@ -306,8 +394,13 @@ function deleteRecord(collection, record) {
   catch (error) { reportError(error); return; }
   confirmAction('confirmDelete', el('div', {}, el('p', { class: 'record-name' }, userText(record.name)), text('deleteHint', 'p')), 'delete', () => commit(removeRecord(state, collection, record.id), 'deleted'));
 }
-function printReport() {
-  printArea.replaceChildren(text('app', 'h1'), el('p', {}, text('generated'), ': ', date(new Date())), el('p', {}, text('inventoryValue'), ': ', money(state.materials.reduce((sum,m) => sum + m.quantity*m.price, 0))), table(['material','categoryId','quantity','location','condition','responsible','status'], state.materials.map(m => [userText(m.name), userText(categoryName(m.categoryId)), number(m.quantity), userText(m.location), text(m.condition), userText(m.responsible || '—'), text(stockStatus(m))])));
+function printReport(categoryId = null) {
+  const category = categoryId === null ? null : state.categories.find(c => c.id === categoryId);
+  if (categoryId !== null && !category) { reportError(new InventoryError('selectPrintCategory')); return; }
+  const materials = category ? state.materials.filter(m => m.categoryId === category.id) : state.materials;
+  printArea.replaceChildren(text('app', 'h1'), ...(category ? [el('h2', {}, text('categoryId'), ': ', userText(category.name))] : []),
+    el('p', {}, text('generated'), ': ', date(new Date())), el('p', {}, text('inventoryValue'), ': ', money(materials.reduce((sum,m) => sum + m.quantity*m.price, 0))),
+    table(['material','categoryId','quantity','location','condition','responsible','status'], materials.map(m => [userText(m.name), userText(categoryName(m.categoryId)), number(m.quantity), userText(m.location), text(m.condition), userText(m.responsible || '—'), text(stockStatus(m))]), category ? 'emptyCategory' : 'empty', category ? 'emptyCategoryHint' : 'emptyHint'));
   window.print();
 }
 renderPage(); document.title = t('app');

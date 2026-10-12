@@ -156,7 +156,27 @@ export const messages = {
   scrollTable: ['Scrollable records table', 'د ثبتونو خوځېدونکی جدول'],
   optional: ['Optional', 'اختیاري'],
   requiredHint: ['Fields marked * are required.', 'په * نښه شوې خانې اړینې دي.'],
-  reload: ['Reload inventory', 'زېرمتون تازه کړئ']
+  reload: ['Reload inventory', 'زېرمتون تازه کړئ'],
+  removeMaterials: ['Remove Materials', 'د توکو موجودي کمه کړئ'],
+  removalHint: ['Deduct stock without deleting records. Select materials, enter whole-unit quantities, then review the batch.', 'د ثبتونو له ړنګولو پرته موجودي کمه کړئ. توکي غوره کړئ، د بشپړو واحدونو شمېر ولیکئ او بیا لېست وګورئ.'],
+  availableQuantity: ['Available quantity', 'موجود شمېر'],
+  units: ['Units', 'واحدونه'],
+  selectMaterial: ['Select material', 'توکی غوره کړئ'],
+  removalAmount: ['Quantity to remove', 'د کمولو شمېر'],
+  excludeRemoval: ['Remove from selection', 'له ټاکل شوي لېست څخه وباسئ'],
+  reviewRemoval: ['Review removal', 'د کمولو لېست وګورئ'],
+  confirmRemoval: ['Confirm stock removal', 'د موجودۍ کمول تایید کړئ'],
+  removalReviewHint: ['Only these quantities will be deducted. Material records will be kept, including those reaching zero stock.', 'یوازې دا شمېرې له موجودۍ کمېږي. د توکو ثبتونه ساتل کېږي، که موجودي یې صفر هم شي.'],
+  remainingQuantity: ['Remaining quantity', 'پاتې شمېر'],
+  removalSaved: ['Stock quantities removed successfully.', 'د موجودۍ شمېرې په بریالیتوب کمې شوې.'],
+  removalEmpty: ['Select at least one material.', 'لږ تر لږه یو توکی غوره کړئ.'],
+  removalQuantity: ['Enter a positive whole number for every removal quantity.', 'د هر توکي د کمولو لپاره مثبته بشپړه شمېره ولیکئ.'],
+  removalExcess: ['The combined removal exceeds available stock. Check the selected quantities.', 'د کمولو ټول شمېر له موجودۍ زیات دی. ټاکل شوې شمېرې وګورئ.'],
+  removalMissing: ['A selected material is no longer available. Reload and review the selection.', 'یو ټاکل شوی توکی نور نشته. پاڼه تازه کړئ او لېست بیا وګورئ.'],
+  printCategory: ['Print Selected Category', 'ټاکل شوې کټګوري چاپ کړئ'],
+  selectPrintCategory: ['Select a category to print.', 'د چاپ لپاره کټګوري غوره کړئ.'],
+  emptyCategory: ['This category has no materials.', 'په دې کټګورۍ کې توکي نشته.'],
+  emptyCategoryHint: ['No inventory quantities are recorded for this category.', 'د دې کټګورۍ لپاره د موجودۍ شمېرې نه دي ثبت شوې.']
 };
 let language = 'en';
 export function setLanguage(value) { language = value === 'ps' ? 'ps' : 'en'; }
