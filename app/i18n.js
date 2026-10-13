@@ -5,6 +5,8 @@ export const messages = {
   brand: ['IT Inventory', 'د IT زېرمتون'],
   university: ['UNIVERSITY · IT DEPARTMENT', 'پوهنتون · د معلوماتي ټکنالوژۍ څانګه'],
   workspace: ['Workspace', 'کاري چاپېریال'],
+  signOut: ['Sign out', 'وتل'],
+  signOutFailed: ['Could not sign out. Check your connection and try again.', 'وتل ناکام شول. خپله اړیکه وګورئ او بیا هڅه وکړئ.'],
   dashboard: ['Overview', 'عمومي کتنه'],
   materials: ['Materials', 'توکي'],
   categories: ['Categories', 'کټګورۍ'],

@@ -1,16 +1,16 @@
 # University IT Inventory
 
-A lightweight English/Pashto inventory application for a university IT department. Modular vanilla JavaScript with no frontend build step. A separate server-only PostgreSQL connection foundation uses `pg` and `dotenv`.
+A lightweight English/Pashto inventory application for a university IT department. Modular vanilla JavaScript with no frontend build step. Express protects the inventory with a shared Admin login and PostgreSQL-backed sessions.
 
 ## Run locally
 
-Use Node.js 22 or later. From this folder:
+Use Node.js 22 or later. First complete the [authentication setup](docs/AUTHENTICATION.md): install dependencies, run the separate session-table migration in pgAdmin, configure the private session secret, and set the shared Admin credentials. From this folder:
 
 ```powershell
 npm start
 ```
 
-Open **http://127.0.0.1:8080**. Keep the same browser and origin to retain access to your local inventory. Stop the server with Ctrl+C. Do not open index.html directly: the application uses ES modules.
+Open **http://127.0.0.1:8080** and sign in. Use **Sign out** in the header to end the session. Keep the same browser and origin to retain access to your local inventory. Stop the server with Ctrl+C. Do not open index.html directly: the application uses ES modules.
 
 If port 8080 is occupied, choose another port (PowerShell):
 
@@ -36,7 +36,7 @@ New installations start empty. Add a category, then materials; suppliers are opt
 
 ## Data and deployment boundaries
 
-Records remain in this browser's localStorage under the existing university_it_inventory_v2 key. Legacy ims_* keys remain untouched. There is no authentication or centralized shared database. Use one editing tab and download backups regularly. The latest recovery snapshot is not a substitute for external backups.
+Records remain in this browser's localStorage under the existing university_it_inventory_v2 key. Legacy ims_* keys remain untouched. Authentication and sessions use PostgreSQL; inventory records are not centralized yet. Use one editing tab and download backups regularly. The latest recovery snapshot is not a substitute for external backups.
 
 The manifest and an unregistered service-worker draft prepare for future PWA work; installability/offline caching is not enabled. Pashto translations need fluent staff review. Do not deploy the archive directory.
 
@@ -82,5 +82,7 @@ npm test
 ```
 
 For browser checks, start the local server, make Playwright available, then run `node tests/browser.mjs`. The suite defaults to installed Microsoft Edge; set `BROWSER_CHANNEL` to change it and `PLAYWRIGHT_MODULE` to point at an existing Playwright installation. It uses a disposable profile and never reads your normal browser data. Screenshots and test exports go to tests/artifacts (ignored by Git).
+
+Browser tests require `TEST_ADMIN_USERNAME` and `TEST_ADMIN_PASSWORD` set privately in the terminal. See [authentication verification](docs/AUTHENTICATION.md#verification). `npm run test:auth:browser` checks the login page and logout flow.
 
 `npm run test:browser` runs the full regression suite; `npm run test:qa` adds deployment, resource, accessibility and Android touch-emulation checks. Set `TEST_BASE_URL` to the printed server URL if using a different port. The QA HTTP-origin test maps a synthetic hostname inside its disposable browser; it does not change Windows DNS or expose the server to the LAN. See [the final QA review](docs/QA-REVIEW.md).

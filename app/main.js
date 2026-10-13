@@ -1,6 +1,7 @@
 import { KEY, RECOVERY_KEY, LEGACY_KEYS, Repository, emptyState, stockStatus, upsert, removeRecord, parseBackup, backupPayload, InventoryError, createId, deductStock } from './data.js';
 import { t, setLanguage, number, money, date } from './i18n.js';
 import { el, text, button, userText, localize, table } from './ui.js';
+import { logout } from './auth.js';
 
 // Defer the localStorage getter too: privacy settings may throw on access itself.
 const repository = new Repository({
@@ -29,7 +30,9 @@ const pageDescription = el('p', { class: 'muted' });
 const menu = el('button', { type: 'button', class: 'button menu-button', 'data-label': 'menu', 'aria-label': t('menu'), 'aria-controls': 'navigation', 'aria-expanded': 'false', onclick: () => toggleMenu() }, icon('☰'));
 function languageButton() { return el('button', { type: 'button', class: 'button language-button', 'aria-label': 'English / پښتو', onclick: changeLanguage }, prefs.lang === 'en' ? 'پښتو' : 'English'); }
 function themeButton() { return button('theme', changeTheme, 'theme-button', { 'aria-pressed': String(prefs.dark) }); }
-const globalActions = el('div', { class: 'header-actions' }, languageButton(), themeButton());
+const globalActions = el('div', { class: 'header-actions' }, languageButton(), themeButton(), button('signOut', async () => {
+  try { await logout(); } catch { notify('signOutFailed'); }
+}));
 const heading = el('header', { class: 'topbar' }, el('div', { class: 'breadcrumb' }, menu, text('university')), globalActions);
 const content = el('div', { id: 'page-content' });
 const errorBanner = el('div', { class: 'notice error', role: 'alert', hidden: true });

@@ -5,10 +5,12 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { authenticateContext } from './helpers/browser-auth.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+await authenticateContext(context);
 const page = await context.newPage();
 const errors=[];
 const failedRequests=[];
@@ -109,7 +111,7 @@ try {
   await page.locator('#restore-file').setInputFiles({name:'valid.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.locator('[data-i18n=preview]').click();await page.locator('.confirm-dialog .primary').click();assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key+'_recovery')).raw,key),'{corrupt');
  });
  await check('blocked storage access presents recovery without crashing',async()=>{
-  const blockedContext=await browser.newContext();await blockedContext.addInitScript(()=>{Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Blocked','SecurityError');}});});const blocked=await blockedContext.newPage();const blockedErrors=[];blocked.on('pageerror',e=>blockedErrors.push(e.message));await blocked.goto(base);await blocked.locator('h1').waitFor();assert.ok((await blocked.locator('[role=alert]').first().innerText()).includes('Stored data'));assert.deepEqual(blockedErrors,[]);await blockedContext.close();
+  const blockedContext=await browser.newContext();await authenticateContext(blockedContext);await blockedContext.addInitScript(()=>{Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Blocked','SecurityError');}});});const blocked=await blockedContext.newPage();const blockedErrors=[];blocked.on('pageerror',e=>blockedErrors.push(e.message));await blocked.goto(base);await blocked.locator('h1').waitFor();assert.ok((await blocked.locator('[role=alert]').first().innerText()).includes('Stored data'));assert.deepEqual(blockedErrors,[]);await blockedContext.close();
  });
  await check('direct-file recovery exports original records without changing them',async()=>{
   const filePage=await context.newPage();const fileErrors=[];filePage.on('pageerror',e=>fileErrors.push(e.message));await filePage.goto(pathToFileURL(resolve('index.html')).href);await filePage.evaluate(({key,fixture})=>localStorage.setItem(key,JSON.stringify(fixture)),{key,fixture});await filePage.reload();assert.equal(await filePage.locator('.file-recovery').count(),1);const event=filePage.waitForEvent('download');await filePage.locator('.file-recovery button').first().click();await (await event).saveAs('tests/artifacts/file-recovery.json');assert.deepEqual(await filePage.evaluate(key=>JSON.parse(localStorage.getItem(key)),key),fixture);assert.deepEqual(fileErrors,[]);await filePage.close();

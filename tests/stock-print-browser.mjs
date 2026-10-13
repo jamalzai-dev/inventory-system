@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { authenticateContext } from './helpers/browser-auth.mjs';
 const require=createRequire(import.meta.url);
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL || 'msedge',headless:true});
@@ -15,6 +16,7 @@ const fixture={materials:[
 const checks=[],errors=[],requests=[];
 async function check(name,action){
  const context=await browser.newContext({viewport:{width:1440,height:1000}});
+ await authenticateContext(context);
  context.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));p.on('console',m=>{if(m.type()==='error')errors.push(m.text());});});
  context.on('requestfailed',r=>requests.push(r.url()));context.on('response',r=>{if(r.status()>=400)requests.push(`${r.status()} ${r.url()}`);});
  const page=await context.newPage();

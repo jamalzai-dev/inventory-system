@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
+import { authenticateContext } from './helpers/browser-auth.mjs';
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({channel: process.env.BROWSER_CHANNEL || 'msedge', headless:true});
@@ -16,7 +17,7 @@ function observe(context) {
   context.on('response',r=>{if(r.status()>=400)failedRequests.push(`${r.status()} ${r.url()}`);});
 }
 async function check(name, action, options={}) {
-  const context=await browser.newContext(options); observe(context);const page=await context.newPage();
+  const context=await browser.newContext(options); await authenticateContext(context); observe(context);const page=await context.newPage();
   try { await page.goto(base);await page.locator('h1').waitFor();await page.evaluate(({key,fixture})=>{localStorage.setItem(key,JSON.stringify(fixture));localStorage.setItem('university_it_preferences',JSON.stringify({lang:'en',dark:false}));},{key,fixture});await page.reload();await page.locator('h1').waitFor();await action(page,context);checks.push(name);console.log('PASS',name); }
   finally { await context.close(); }
 }
@@ -68,7 +69,7 @@ try {
   // server loopback-only while exercising a genuine insecure HTTP origin.
   const httpBrowser=await chromium.launch({channel:process.env.BROWSER_CHANNEL || 'msedge',headless:true,args:['--host-resolver-rules=MAP inventory.test 127.0.0.1','--no-proxy-server']});
   try {
-    const context=await httpBrowser.newContext();observe(context);const page=await context.newPage();const url=new URL(base);url.hostname='inventory.test';await page.goto(url.href);await page.locator('h1').waitFor();
+    const context=await httpBrowser.newContext();observe(context);const page=await context.newPage();const url=new URL(base);url.hostname='inventory.test';await page.goto(url.origin+'/login');await page.locator('#username').fill(process.env.TEST_ADMIN_USERNAME);await page.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD);await page.locator('#login-submit').click();await page.waitForURL(url.origin+'/');await page.locator('h1').waitFor();
     assert.equal(await page.evaluate(()=>isSecureContext),false);assert.equal(await page.evaluate(()=>typeof crypto.randomUUID),'undefined');await page.goto(url.href+'#categories');await page.locator('#page-actions .primary').click();await page.locator('#field-name').fill('HTTP origin');await page.locator('dialog form [type=submit]').click();assert.equal(await page.locator('.record-dialog').isVisible(),false);assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).categories.length,key),1);
     checks.push('genuine insecure HTTP origin supports record creation');console.log('PASS genuine insecure HTTP origin supports record creation');
   } finally { await httpBrowser.close(); }
