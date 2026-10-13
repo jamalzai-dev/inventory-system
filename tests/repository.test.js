@@ -35,7 +35,7 @@ test('preview server serves complete public resources, excludes private files an
     child.on('error', error => { clearTimeout(timeout); reject(error); });
     child.stdout.on('data', chunk => { const found = String(chunk).match(/Local: (http:\/\/127\.0\.0\.1:\d+)/); if (found) { clearTimeout(timeout); done(found[1]); } });
   });
-  for (const path of ['index.html','manifest.webmanifest','service-worker.js','assets/inventory.svg', ...(await readdir(resolve(root,'app'))).map(name=>`app/${name}`), 'products.html','categories.html','suppliers.html','reports.html','orders.html','adjustments.html','log.html']) {
+  for (const path of ['index.html','manifest.webmanifest','service-worker.js','assets/inventory.svg', ...(await readdir(resolve(root,'app'), {withFileTypes:true})).filter(entry=>entry.isFile()).map(entry=>`app/${entry.name}`), 'products.html','categories.html','suppliers.html','reports.html','orders.html','adjustments.html','log.html']) {
     const response = await fetch(`${url}/${path}`);
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
@@ -43,7 +43,7 @@ test('preview server serves complete public resources, excludes private files an
     if (path.endsWith('.svg')) assert.match(response.headers.get('content-type'), /image\/svg\+xml/);
     if (path.endsWith('.js')) assert.match(response.headers.get('content-type'), /text\/javascript/);
   }
-  for (const path of ['archive/index.html','Archive/index.html','tests/artifacts/export.json','README.md','%2e%2e/package.json','app/%2e%2e/package.json','missing.svg','%ZZ']) assert.equal((await fetch(`${url}/${path}`)).status,404,path);
+  for (const path of ['archive/index.html','Archive/index.html','tests/artifacts/export.json','README.md','%2e%2e/package.json','app/%2e%2e/package.json','missing.svg','%ZZ','app/config','app/config/db.js','app/config%2fdb.js','.env','.env.example','.env.local','package.json','package-lock.json','tools/check-db.mjs']) assert.equal((await fetch(`${url}/${path}`)).status,404,path);
   const conflict = spawnSync(process.execPath, [resolve(root,'tools/serve.mjs')], { env: {...process.env, PORT: new URL(url).port}, windowsHide:true, encoding:'utf8',timeout:5000 });
   assert.equal(conflict.status,1); assert.match(conflict.stderr,/already in use/);
 });

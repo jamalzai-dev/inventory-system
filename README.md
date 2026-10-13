@@ -1,6 +1,6 @@
 # University IT Inventory
 
-A lightweight English/Pashto inventory application for a university IT department. Modular vanilla JavaScript; no production dependencies or build step.
+A lightweight English/Pashto inventory application for a university IT department. Modular vanilla JavaScript with no frontend build step. A separate server-only PostgreSQL connection foundation uses `pg` and `dotenv`.
 
 ## Run locally
 
@@ -45,6 +45,35 @@ The manifest and an unregistered service-worker draft prepare for future PWA wor
 - [LAN/backend and PWA plan](docs/DEPLOYMENT.md)
 - [Changed files and fixes](docs/CHANGES.md)
 - [Test results and commands](docs/TESTING.md)
+
+## PostgreSQL connection setup (Step 1)
+
+Install Node.js 22+ and run `npm ci` from the project root. Install and start
+PostgreSQL on the same machine before checking the connection. The existing
+`university_inventory` database and `inventory_app` role must already be configured;
+this step does not create or alter tables or seed records.
+
+If `.env` does not already exist, copy `.env.example` to `.env` in the project root
+(`Copy-Item .env.example .env` in PowerShell, or `cp .env.example .env` on Linux).
+Edit `.env` locally and replace the password placeholder with the private password
+for `inventory_app`. Never commit this file or share its contents. Operating-system
+environment variables take precedence over `.env`; the file is found relative to
+the database module, regardless of the terminal working directory.
+
+Run `npm run check:db`. It executes only `SELECT 1` and closes the connection pool.
+If it fails, check that PostgreSQL is running and listening on the configured port,
+that the database name is correct, and that the role/password and PostgreSQL access
+rules permit the connection. Defaults are host `127.0.0.1` and port `5432`;
+`PGDATABASE`, `PGUSER`, and `PGPASSWORD` are required. Only `127.0.0.1`, `localhost`,
+and `::1` are accepted hosts. PostgreSQL SSL is disabled only for this same-host
+connection; browser HTTPS will be handled separately by Nginx.
+
+The frontend continues to use browser-local storage. The static server's explicit
+allowlist excludes the connection module, environment files and project configuration.
+PostgreSQL `NUMERIC` values retain `pg`'s default string representation for exact
+decimal values. Future transactions must acquire one client with `pool.connect()`,
+use it for `BEGIN`, all statements and `COMMIT`, roll back on failure, and always
+release it in `finally`.
 
 ## Tests
 
