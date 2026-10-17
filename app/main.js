@@ -2,6 +2,9 @@ import { KEY, RECOVERY_KEY, LEGACY_KEYS, Repository, emptyState, stockStatus, up
 import { t, setLanguage, number, money, date } from './i18n.js';
 import { el, text, button, userText, localize, table } from './ui.js';
 import { logout } from './auth.js';
+import { icon } from './icons.js';
+import { createGlobalSearch } from './search.js';
+import { summarizeInventory, filterMaterials, renderInventoryCharts } from './dashboard.js';
 
 // Defer the localStorage getter too: privacy settings may throw on access itself.
 const repository = new Repository({
@@ -14,26 +17,36 @@ let prefs = { lang: document.documentElement.lang, dark: document.documentElemen
 setLanguage(prefs.lang);
 const pages = ['dashboard', 'materials', 'categories', 'suppliers', 'reports', 'backup', 'settings'];
 let page = pages.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard';
-let query = '', categoryFilter = '', statusFilter = '';
+let query = '', categoryFilter = '', statusFilter = '', materialSort = 'recent';
+let inventoryStale = false;
 let selectedBackupFile = null;
 let reportCategory = '', refreshRemovalLabels = null;
 let opener, noticeTimer, pendingConfirmation;
-const icon = (value) => el('span', { class: 'icon', 'aria-hidden': 'true' }, value);
-const brand = () => el('div', { class: 'brand' }, el('span', { class: 'brand-mark', 'aria-hidden': 'true' }, '▦'), el('div', {}, text('brand', 'strong'), text('university', 'small')));
+// Reserved for the official KDRU IT logo. Insert an <img src="assets/kdru-it-logo.svg"
+// alt=""> inside .logo-space when the approved asset is supplied; keep it empty until then.
+const brand = () => el('div', { class: 'brand' }, el('span', { class: 'logo-space', 'aria-hidden': 'true' }), el('div', {}, text('brand', 'strong'), text('university', 'small')));
 const nav = el('nav', { 'aria-label': t('workspace'), 'data-label': 'workspace' });
-const icons = ['◫', '▣', '▤', '♧', '▥', '⇅', '⚙'];
+const icons = ['dashboard', 'package', 'layers', 'truck', 'chart', 'database', 'settings'];
 pages.forEach((key, index) => nav.append(el('button', { type: 'button', 'data-page': key, onclick: () => navigate(key) }, icon(icons[index]), text(key))));
-const sidebar = el('aside', { class: 'sidebar', id: 'navigation' }, brand(), text('workspace', 'p', { class: 'eyebrow' }), nav,
+const sidebar = el('aside', { class: 'sidebar', id: 'navigation', 'aria-label': t('workspace'), 'data-label': 'workspace' }, brand(),
+  el('button', { type: 'button', class: 'button sidebar-close', 'aria-label': t('close'), 'data-label': 'close', onclick: () => toggleMenu(false, true) }, icon('x')),
+  text('workspace', 'p', { class: 'eyebrow' }), nav,
   el('div', { class: 'sidebar-note' }, el('span', { class: 'local-dot', 'aria-hidden': true }), text('local'), text('localHint', 'p')));
+const backdrop = el('div', { class: 'sidebar-backdrop', hidden: true, onclick: () => toggleMenu(false, true) });
 const pageTitle = el('h1', { tabindex: '-1' });
 const pageDescription = el('p', { class: 'muted' });
-const menu = el('button', { type: 'button', class: 'button menu-button', 'data-label': 'menu', 'aria-label': t('menu'), 'aria-controls': 'navigation', 'aria-expanded': 'false', onclick: () => toggleMenu() }, icon('☰'));
-function languageButton() { return el('button', { type: 'button', class: 'button language-button', 'aria-label': 'English / پښتو', onclick: changeLanguage }, prefs.lang === 'en' ? 'پښتو' : 'English'); }
-function themeButton() { return button('theme', changeTheme, 'theme-button', { 'aria-pressed': String(prefs.dark) }); }
-const globalActions = el('div', { class: 'header-actions' }, languageButton(), themeButton(), button('signOut', async () => {
-  try { await logout(); } catch { notify('signOutFailed'); }
-}));
-const heading = el('header', { class: 'topbar' }, el('div', { class: 'breadcrumb' }, menu, text('university')), globalActions);
+const menu = el('button', { type: 'button', class: 'button menu-button', 'data-label': 'menu', 'aria-label': t('menu'), 'aria-controls': 'navigation', 'aria-expanded': 'false', onclick: () => toggleMenu() }, icon('menu'));
+const headerTitle = el('span', { class: 'header-page' });
+const globalSearch = createGlobalSearch({
+  getState: () => state,
+  isUnavailable: () => repository.blocked || inventoryStale,
+  onSelect: (collection, id) => {
+    navigate(collection);
+    const row = [...content.querySelectorAll('[data-record-id]')].find(node => node.dataset.recordId === id);
+    if (row) { row.classList.add('record-highlight'); row.tabIndex = -1; row.focus({ preventScroll: true }); row.scrollIntoView({ block: 'center', behavior: 'instant' }); }
+  }
+});
+const heading = el('header', { class: 'topbar' }, el('div', { class: 'header-context breadcrumb' }, menu, text('headerDepartment'), el('span', { class: 'breadcrumb-divider', 'aria-hidden': true }, '/'), headerTitle), globalSearch.element);
 const content = el('div', { id: 'page-content' });
 const errorBanner = el('div', { class: 'notice error', role: 'alert', hidden: true });
 const main = el('main', { id: 'main', tabindex: '-1' }, heading, el('div', { class: 'content' }, errorBanner,
@@ -51,7 +64,7 @@ for (const modal of [dialog, confirmDialog]) {
   });
 }
 const printArea = el('section', { id: 'print-area' });
-document.querySelector('#app').append(el('a', { href: '#main', class: 'skip-link', 'data-i18n': 'skip' }, t('skip')), sidebar, main, dialog, confirmDialog, toast, printArea);
+document.querySelector('#app').append(el('a', { href: '#main', class: 'skip-link', 'data-i18n': 'skip' }, t('skip')), sidebar, backdrop, main, dialog, confirmDialog, toast, printArea);
 
 function reportError(error, target = errorBanner) {
   const key = error instanceof InventoryError ? error.code : 'storageFailed';
@@ -69,22 +82,46 @@ function commit(next, message, options) {
   next.settings = { ...prefs };
   state = repository.save(next, options);
   errorBanner.hidden = true;
-  renderPage(); notify(message);
+  renderPage(); globalSearch.refresh(); notify(message);
 }
-function toggleMenu(force) {
-  const open = force ?? !sidebar.classList.contains('open');
+const mobileNavigation = matchMedia('(max-width: 900px)');
+function toggleMenu(force, restoreFocus = false) {
+  const open = mobileNavigation.matches && (force ?? !sidebar.classList.contains('open'));
   sidebar.classList.toggle('open', open);
+  sidebar.inert = mobileNavigation.matches && !open;
+  main.inert = open;
+  backdrop.hidden = !open;
+  document.body.classList.toggle('navigation-open', open);
   menu.setAttribute('aria-expanded', String(open));
-  if (open) nav.querySelector('[aria-current="page"]')?.focus();
+  if (open) {
+    globalSearch.close();
+    sidebar.setAttribute('role', 'dialog'); sidebar.setAttribute('aria-modal', 'true');
+    nav.querySelector('[aria-current="page"]')?.focus();
+  } else {
+    sidebar.removeAttribute('role'); sidebar.removeAttribute('aria-modal');
+    if (restoreFocus) menu.focus();
+  }
 }
-function navigate(next) {
-  page = next; query = ''; categoryFilter = ''; statusFilter = '';
+mobileNavigation.addEventListener('change', () => toggleMenu(false));
+toggleMenu(false);
+sidebar.addEventListener('keydown', event => {
+  if (!sidebar.classList.contains('open') || event.key !== 'Tab') return;
+  const controls = [...sidebar.querySelectorAll('button')].filter(node => node.getClientRects().length);
+  const first = controls[0], last = controls.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+function navigate(next, { preserveFilters = false } = {}) {
+  page = next;
+  if (!preserveFilters) { query = ''; categoryFilter = ''; statusFilter = ''; materialSort = 'recent'; }
   history.replaceState(null, '', `#${next}`);
   toggleMenu(false); renderPage(); pageTitle.focus();
 }
 window.addEventListener('hashchange', () => { const next = location.hash.slice(1); if (pages.includes(next)) navigate(next); });
-document.addEventListener('keydown', event => { if (event.key === 'Escape' && sidebar.classList.contains('open')) { toggleMenu(false); menu.focus(); } });
-window.addEventListener('storage', event => { if (event.key === KEY || event.key === null) reportError(new InventoryError('staleData')); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && sidebar.classList.contains('open')) { event.preventDefault(); toggleMenu(false, true); } });
+window.addEventListener('storage', event => {
+  if (event.key === KEY || event.key === null) { inventoryStale = true; globalSearch.refresh(); reportError(new InventoryError('staleData')); }
+});
 function savePreferences() {
   const activeSetting = document.activeElement.closest('.setting-row');
   const focusPosition = activeSetting ? [...document.querySelectorAll('.setting-row')].indexOf(activeSetting) : -1;
@@ -94,21 +131,23 @@ function savePreferences() {
   document.documentElement.dataset.theme = prefs.dark ? 'dark' : 'light';
   setLanguage(prefs.lang);
   try { localStorage.setItem('university_it_preferences', JSON.stringify(prefs)); } catch { notify('preferenceFailed'); }
-  document.querySelectorAll('.language-button').forEach(node => { node.textContent = prefs.lang === 'en' ? 'پښتو' : 'English'; });
-  document.querySelectorAll('.theme-button').forEach(node => node.setAttribute('aria-pressed', String(prefs.dark)));
-  localize(); renderPage();
+  localize(); renderPage(); globalSearch.refresh();
   refreshRemovalLabels?.();
   if (focusPosition >= 0) document.querySelectorAll('.setting-row')[focusPosition]?.querySelectorAll('button')[focusButton]?.focus();
   document.title = t('app');
 }
-function changeLanguage() { prefs.lang = prefs.lang === 'en' ? 'ps' : 'en'; savePreferences(); }
-function changeTheme() { prefs.dark = !prefs.dark; savePreferences(); }
 function badge(m) { const key = stockStatus(m); return text(key, 'span', { class: `pill ${key}` }); }
 function categoryName(id) { return state.categories.find(x => x.id === id)?.name ?? '—'; }
-function materialName(m) { return el('div', { class: 'record-name' }, userText(m.name), el('small', { class: 'muted' }, m.serial ? el('bdi', { dir: 'ltr' }, m.serial) : text('noSerial'))); }
+function materialName(m) { return el('div', { class: 'record-name' }, el('span', { class: 'record-icon', 'aria-hidden': true }, icon('package')), el('div', {}, userText(m.name), el('small', { class: 'muted' }, m.serial ? el('bdi', { dir: 'ltr' }, m.serial) : text('noSerial')))); }
 function rowActions(collection, record) {
-  return el('div', { class: 'row-actions' }, button('edit', () => openRecord(collection, record.id), 'small', { disabled: repository.blocked }),
-    button('delete', () => deleteRecord(collection, record), 'small danger-text', { disabled: repository.blocked }));
+  const edit = button('edit', () => openRecord(collection, record.id), 'small', { disabled: repository.blocked, title: t('edit'), 'aria-label': `${t('edit')}: ${record.name}` });
+  const remove = button('delete', () => deleteRecord(collection, record), 'small danger-text', { disabled: repository.blocked, title: t('delete'), 'aria-label': `${t('delete')}: ${record.name}` });
+  edit.prepend(icon('edit')); remove.prepend(icon('trash'));
+  return el('div', { class: 'row-actions' }, edit, remove);
+}
+function identifyRows(wrapper, records) {
+  wrapper.querySelectorAll('tbody tr').forEach((row, index) => { if (records[index]) row.dataset.recordId = records[index].id; });
+  return wrapper;
 }
 function materialRows(records, actions = false) {
   return records.map(m => [materialName(m), userText(categoryName(m.categoryId)), el('div', {}, number(m.quantity), el('small', { class: 'muted' }, text('reorderLevel'), ': ', number(m.reorderLevel))), userText(m.location),
@@ -117,43 +156,60 @@ function materialRows(records, actions = false) {
 function card(title, description, body, action = null) {
   return el('section', { class: 'card' }, el('div', { class: 'card-heading' }, el('div', {}, text(title, 'h2'), description ? text(description, 'p', { class: 'muted' }) : null), action), body);
 }
+function materialFilterControls(draw, { includeSort = true } = {}) {
+  const category = el('select', { 'aria-label': t('categoryId'), 'data-label': 'categoryId' }, el('option', { value: '' }, t('allCategories')), state.categories.map(c => el('option', { value: c.id }, c.name)));
+  category.value = categoryFilter;
+  const status = el('select', { 'aria-label': t('status'), 'data-label': 'status' }, ['', 'good', 'low', 'out'].map(key => el('option', { value: key }, t(key || 'allStatuses'))));
+  status.value = statusFilter;
+  category.addEventListener('change', () => { categoryFilter = category.value; draw(); });
+  status.addEventListener('change', () => { statusFilter = status.value; draw(); });
+  const sort = el('select', { 'aria-label': t('sortBy'), 'data-label': 'sortBy', class: 'material-sort' }, ['recent','name','category','quantity','status'].map(key => el('option', { value: key }, t(`sort_${key}`))));
+  sort.value = materialSort;
+  sort.addEventListener('change', () => { materialSort = sort.value; draw(); });
+  return [category, status, ...(includeSort ? [sort] : [])];
+}
 function renderDashboard() {
-  const ms = state.materials;
-  const stats = [ ['totalMaterials', ms.length, 'registered'], ['totalQuantity', ms.reduce((sum, m) => sum + m.quantity, 0), 'combined'], ['low', ms.filter(m => stockStatus(m) === 'low').length, 'reorderHint'], ['out', ms.filter(m => stockStatus(m) === 'out').length, 'restockHint'] ];
-  const cards = el('div', { class: 'stats' }, stats.map(([key, value, hint], index) => el('section', { class: `stat stat-${index}` }, text(key, 'h2'), el('strong', { class: 'stat-value' }, number(value)), text(hint, 'p'))));
-  const recent = [...ms].sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 5);
-  const quick = el('div', { class: 'quick-actions' },
-    button('addMaterial', () => openRecord('materials'), 'primary', { disabled: repository.blocked }),
-    button('viewReports', () => navigate('reports')), button('backupAction', () => run(exportInventory)),
-    text('localHint', 'p', { class: 'muted' }));
-  content.append(cards, el('div', { class: 'dashboard-grid' }, card('recent', 'recentDesc', table(['material','categoryId','quantity','location','status'], materialRows(recent)), button('viewAll', () => navigate('materials'), 'small')),
-    card('quick', null, quick)));
+  const summary = summarizeInventory(state);
+  const stats = [['totalMaterials', summary.total, 'registered', 'package'], ['good', summary.good, 'healthyCountHint', 'check'], ['low', summary.low, 'lowCountHint', 'alert'], ['out', summary.out, 'outCountHint', 'circleOff']];
+  const cards = el('div', { class: 'stats' }, stats.map(([key, value, hint, symbol], index) => el('section', { class: `stat stat-${index}` }, el('div', { class: 'stat-heading' }, text(key, 'h2'), el('span', { class: `stat-icon ${key}`, 'aria-hidden': true }, icon(symbol))), el('strong', { class: 'stat-value' }, number(value)), text(hint, 'p'))));
+  const result = el('div');
+  const count = el('p', { class: 'result-count', 'aria-live': 'polite' });
+  const filters = el('div', { class: 'filters preview-filters', id: 'preview-filters', hidden: !categoryFilter && !statusFilter && materialSort === 'recent' });
+  const filter = button('filter', () => { filters.hidden = !filters.hidden; filter.setAttribute('aria-expanded', String(!filters.hidden)); if (!filters.hidden) filters.querySelector('select')?.focus(); }, '', { 'aria-controls': 'preview-filters', 'aria-expanded': String(!filters.hidden) });
+  filter.prepend(icon('filter'));
+  const seeAll = button('seeAll', () => navigate('materials', { preserveFilters: true }), '');
+  seeAll.append(icon('arrowRight'));
+  filters.append(...materialFilterControls(draw));
+  const preview = card('materialInventory', 'inventoryPreviewHint', el('div', {}, filters, result, count), el('div', { class: 'card-actions' }, filter, seeAll));
+  preview.classList.add('inventory-preview');
+  function draw() {
+    const matches = filterMaterials(state, { category: categoryFilter, status: statusFilter, sort: materialSort });
+    const rows = matches.slice(0, 6);
+    result.replaceChildren(identifyRows(table(['material','categoryId','quantity','location','status','actions'], rows.map(m => [...materialRows([m])[0], rowActions('materials', m)])), rows));
+    count.textContent = t('previewCount', { count: number(rows.length), total: number(matches.length) });
+  }
+  draw();
+  content.append(cards, renderInventoryCharts(state), preview);
 }
 function filtered(collection) {
-  const needle = query.toLocaleLowerCase().trim();
-  return state[collection].filter(record => (!needle || [...Object.values(record), ...(collection === 'materials' ? [categoryName(record.categoryId)] : [])].some(value => String(value).toLocaleLowerCase().includes(needle))) &&
-    (collection !== 'materials' || ((!categoryFilter || record.categoryId === categoryFilter) && (!statusFilter || stockStatus(record) === statusFilter))));
+  if (collection === 'materials') return filterMaterials(state, { query, category: categoryFilter, status: statusFilter, sort: materialSort });
+  const needle = query.normalize('NFKC').toLocaleLowerCase().trim();
+  const fields = collection === 'categories' ? ['name','description'] : ['name','contact','phone','email','address'];
+  return state[collection].filter(record => !needle || fields.some(key => String(record[key] || '').normalize('NFKC').toLocaleLowerCase().includes(needle)));
 }
 function renderRecords(collection) {
   const search = el('input', { type: 'search', 'aria-label': t('search'), 'data-label': 'search', 'data-placeholder': 'searchHint', placeholder: t('searchHint'), value: query });
   const filters = el('div', { class: 'filters' }, search);
   const result = el('div');
   const count = el('p', { class: 'result-count', 'aria-live': 'polite' });
-  if (collection === 'materials') {
-    const category = el('select', { 'aria-label': t('categoryId'), 'data-label': 'categoryId' }, el('option', { value: '' }, t('allCategories')), state.categories.map(c => el('option', { value: c.id }, c.name)));
-    category.value = categoryFilter;
-    const status = el('select', { 'aria-label': t('status'), 'data-label': 'status' }, ['', 'good', 'low', 'out'].map(key => el('option', { value: key }, t(key || 'allStatuses'))));
-    status.value = statusFilter;
-    category.addEventListener('change', () => { categoryFilter = category.value; draw(); });
-    status.addEventListener('change', () => { statusFilter = status.value; draw(); });
-    filters.append(category, status);
-  }
+  if (collection === 'materials') filters.append(...materialFilterControls(draw));
   function draw() {
     const rows = filtered(collection);
     count.textContent = t('count', { count: number(rows.length) });
-    if (collection === 'materials') result.replaceChildren(table(['material','categoryId','quantity','location','condition','responsible','status','actions'], materialRows(rows, true)));
+    if (collection === 'materials') result.replaceChildren(identifyRows(table(['material','categoryId','quantity','location','condition','responsible','status','actions'], materialRows(rows, true)), rows));
     else if (collection === 'categories') result.replaceChildren(table(['categoryId','description','materials','actions'], rows.map(c => [userText(c.name), userText(c.description || '—'), number(state.materials.filter(m => m.categoryId === c.id).length), rowActions(collection, c)])));
     else result.replaceChildren(table(['supplierId','contact','phone','email','address','materials','actions'], rows.map(s => [userText(s.name), userText(s.contact || '—'), el('bdi', { dir: 'ltr' }, s.phone || '—'), el('bdi', { dir: 'ltr' }, s.email || '—'), userText(s.address || '—'), number(state.materials.filter(m => m.supplierId === s.id).length), rowActions(collection, s)])));
+    identifyRows(result, rows);
   }
   search.addEventListener('input', () => { query = search.value; draw(); });
   content.append(el('section', { class: 'card' }, filters, result, count)); draw();
@@ -227,20 +283,28 @@ function inspectLegacy() {
   });
 }
 function renderSettings() {
+  const languages = el('div', { class: 'segmented' }, ['en', 'ps'].map(lang => el('button', { type: 'button', class: 'button language-button', 'data-language': lang, lang, 'aria-pressed': String(prefs.lang === lang), onclick: () => { prefs.lang = lang; savePreferences(); } }, lang === 'en' ? 'English' : 'پښتو')));
+  const appearance = el('div', { class: 'segmented' }, ['light', 'dark'].map(theme => {
+    const control = button(theme, () => { prefs.dark = theme === 'dark'; savePreferences(); }, 'theme-button', { 'data-theme-choice': theme, 'aria-pressed': String(prefs.dark === (theme === 'dark')) });
+    control.prepend(icon(theme === 'light' ? 'sun' : 'moon')); return control;
+  }));
+  const signOut = button('signOut', async () => { try { await logout(); } catch { notify('signOutFailed'); } }, 'danger-text');
+  signOut.prepend(icon('logout'));
   content.append(el('section', { class: 'card settings' },
-    el('div', { class: 'setting-row' }, el('div', {}, text('language', 'h2'), text('languageHint', 'p', { class: 'muted' })), languageButton()),
-    el('div', { class: 'setting-row' }, el('div', {}, text('theme', 'h2'), text('themeHint', 'p', { class: 'muted' })), el('div', { class: 'segmented' },
-      button('light', () => { prefs.dark = false; savePreferences(); }, '', { 'aria-pressed': String(!prefs.dark) }), button('dark', () => { prefs.dark = true; savePreferences(); }, '', { 'aria-pressed': String(prefs.dark) }))),
+    el('div', { class: 'setting-row' }, el('div', {}, text('language', 'h2'), text('languageHint', 'p', { class: 'muted' })), languages),
+    el('div', { class: 'setting-row' }, el('div', {}, text('theme', 'h2'), text('themeHint', 'p', { class: 'muted' })), appearance),
     el('div', { class: 'setting-row' }, el('div', {}, text('currency', 'h2'), text('currencyHint', 'p', { class: 'muted' })), el('bdi', { dir: 'ltr' }, 'AFN'))),
+    el('section', { class: 'card settings settings-section' }, el('div', { class: 'setting-row' }, el('div', {}, text('session', 'h2'), text('sessionHint', 'p', { class: 'muted' })), signOut)),
     text('reviewTranslation', 'p', { class: 'muted translation-note' }));
 }
 function renderPage() {
-  pageTitle.textContent = t(page); pageDescription.textContent = t(`${page}Desc`);
+  pageTitle.textContent = t(page); headerTitle.textContent = t(page); pageDescription.textContent = t(`${page}Desc`);
   nav.querySelectorAll('button').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); });
   const actions = document.querySelector('#page-actions'); actions.replaceChildren();
   if (['dashboard','materials','categories','suppliers'].includes(page)) {
     const collection = page === 'dashboard' ? 'materials' : page;
-    actions.append(button({materials:'addMaterial',categories:'addCategory',suppliers:'addSupplier'}[collection], () => openRecord(collection), 'primary', { disabled: repository.blocked }));
+    const add = button({materials:'addMaterial',categories:'addCategory',suppliers:'addSupplier'}[collection], () => openRecord(collection), 'primary', { disabled: repository.blocked });
+    add.prepend(icon('plus')); actions.append(add);
     if (page === 'materials') actions.append(button('removeMaterials', openRemoval, '', { id: 'remove-materials', disabled: repository.blocked }));
   } else if (page === 'reports') actions.append(button('print', () => printReport()));
   content.replaceChildren();
@@ -251,10 +315,16 @@ function renderPage() {
   else renderSettings();
 }
 function closeDialog() { dialog.close(); }
-dialog.addEventListener('close', () => { refreshRemovalLabels = null; if (opener?.isConnected) opener.focus(); else pageTitle.focus(); });
+dialog.addEventListener('close', () => {
+  refreshRemovalLabels = null;
+  // Native close events are queued: do not steal focus from a new user action.
+  if (document.activeElement === document.body || dialog.contains(document.activeElement)) {
+    if (opener?.isConnected) opener.focus(); else pageTitle.focus();
+  }
+});
 function openDialog(title, body) {
   opener = document.activeElement;
-  dialog.replaceChildren(el('div', { class: 'dialog-heading' }, text(title, 'h2', { id: 'dialog-title' }), el('div', { class: 'dialog-actions' }, languageButton(), themeButton(), button('close', closeDialog, 'small'))), body);
+  dialog.replaceChildren(el('div', { class: 'dialog-heading' }, text(title, 'h2', { id: 'dialog-title' }), el('div', { class: 'dialog-actions' }, button('close', closeDialog, 'small'))), body);
   dialog.showModal();
 }
 function openRemoval() {
@@ -391,7 +461,11 @@ function confirmAction(title, body, actionKey, action) {
   confirmDialog.replaceChildren(text(title, 'h2', { id: 'confirm-title' }), body, errors, el('div', { class: 'dialog-footer' }, cancel, button(actionKey, () => { try { action(); confirmDialog.close(); } catch (error) { reportError(error, errors); } }, 'primary')));
   pendingConfirmation = returnFocus; confirmDialog.showModal(); cancel.focus();
 }
-confirmDialog.addEventListener('close', () => { if (pendingConfirmation?.isConnected) pendingConfirmation.focus(); else pageTitle.focus(); });
+confirmDialog.addEventListener('close', () => {
+  if (document.activeElement === document.body || confirmDialog.contains(document.activeElement)) {
+    if (pendingConfirmation?.isConnected) pendingConfirmation.focus(); else pageTitle.focus();
+  }
+});
 function deleteRecord(collection, record) {
   try { removeRecord(state, collection, record.id); }
   catch (error) { reportError(error); return; }

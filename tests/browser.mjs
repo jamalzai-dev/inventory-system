@@ -25,8 +25,14 @@ const fixture={categories:[{id:'c',name:'Computers',description:'University equi
  {id:'m2',name:'د شبکې سویچ',categoryId:'c2',supplierId:'s',quantity:2,reorderLevel:3,price:12000,location:'Library',condition:'Needs Repair',serial:'NET-012',responsible:'فرید',createdAt:'2026-10-09T10:00:00Z'},
  {id:'m3',name:'USB-C docking station',categoryId:'c',supplierId:'',quantity:0,reorderLevel:2,price:3500,location:'IT Store',condition:'Good',serial:'',createdAt:'2026-10-08T10:00:00Z'}],settings:{lang:'en',dark:false}};
 await mkdir('tests/artifacts',{recursive:true});
-const checks=[];
-async function check(name,fn){await fn(); checks.push(name); console.log('PASS',name);}
+const checks=[], skipped=[];
+async function check(name,fn){
+ try { await fn(); checks.push(name); console.log('PASS',name); }
+ catch(error) {
+  if(name.startsWith('direct-file') && error.message.includes('ERR_BLOCKED_BY_ADMINISTRATOR')) { skipped.push({name,reason:'Managed Chromium policy blocks file:// navigation.'}); console.log('SKIP',name,'— managed browser policy'); }
+  else throw error;
+ }
+}
 try {
  await page.goto(base);
  await page.evaluate(({key,fixture})=>localStorage.setItem(key,JSON.stringify(fixture)),{key,fixture}); await page.reload();
@@ -35,30 +41,30 @@ try {
  await check('category create / edit / search / delete',async()=>{
   await page.locator('nav [data-page="categories"]').click(); await page.locator('#page-actions .primary').click();
   await page.locator('#field-name').fill('  نوې کټګوري  '); await page.locator('#field-description').fill('  unchanged description  '); await page.locator('dialog form [type=submit]').click();
-  await page.locator('input[type=search]').fill('نوې'); assert.equal(await page.locator('tbody tr').count(),1);
+  await page.locator('.filters input[type=search]').fill('نوې'); assert.equal(await page.locator('tbody tr').count(),1);
   await page.locator('tbody button').first().click(); assert.equal(await page.locator('#field-name').inputValue(),'  نوې کټګوري  ');
   await page.locator('#field-name').fill('Updated category'); await page.locator('dialog form [type=submit]').click();
-  await page.locator('input[type=search]').fill('Updated'); await page.locator('tbody button').last().click(); await page.locator('.confirm-dialog .primary').click();
+  await page.locator('.filters input[type=search]').fill('Updated'); await page.locator('tbody button').last().click(); await page.locator('.confirm-dialog .primary').click();
   assert.equal((await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).categories.length,key)),2);
  });
  await check('supplier create / edit / Unicode search / delete',async()=>{
   await page.locator('nav [data-page="suppliers"]').click(); await page.locator('#page-actions .primary').click();
   await page.locator('#field-name').fill('نوی عرضه کوونکی'); await page.locator('#field-phone').fill('+93 700 111 222'); await page.locator('#field-email').fill('bad-email'); await page.locator('dialog form [type=submit]').click(); assert.equal(await page.locator('#field-email').getAttribute('aria-invalid'),'true');
   await page.locator('#field-email').fill('test@example.edu'); await page.locator('dialog form [type=submit]').click();
-  await page.locator('input[type=search]').fill('نوی'); await page.locator('tbody button').first().click(); await page.locator('#field-contact').fill('نوی کس'); await page.locator('dialog form [type=submit]').click();
+  await page.locator('.filters input[type=search]').fill('نوی'); await page.locator('tbody button').first().click(); await page.locator('#field-contact').fill('نوی کس'); await page.locator('dialog form [type=submit]').click();
   assert.ok((await page.locator('tbody').innerText()).includes('نوی کس')); await page.locator('tbody button').last().click(); await page.locator('.confirm-dialog .primary').click();
  });
  await check('material validation, draft preservation, safe rendering and persistence',async()=>{
   await page.locator('nav [data-page="materials"]').click(); await page.locator('#page-actions .primary').click();
   await page.locator('#field-name').fill('<img src=x onerror=alert(1)> پښتو'); await page.locator('#field-location').fill('  لابراتوار  '); await page.locator('#field-categoryId').selectOption('c2'); await page.locator('#field-supplierId').selectOption('s');
   await page.locator('#field-quantity').fill('-1'); await page.locator('dialog form [type=submit]').click(); assert.equal(await page.locator('#field-quantity').getAttribute('aria-invalid'),'true');
-  await page.locator('#field-quantity').fill('7'); await page.locator('dialog .language-button').click(); await page.locator('dialog .theme-button').click();
-  assert.equal(await page.locator('html').getAttribute('dir'),'rtl'); assert.equal(await page.locator('#field-categoryId').inputValue(),'c2'); assert.equal(await page.locator('#field-supplierId').inputValue(),'s'); assert.equal(await page.locator('#field-quantity').inputValue(),'7');
-  await page.locator('dialog .language-button').click(); await page.locator('dialog .theme-button').click(); await page.locator('dialog form [type=submit]').click();
-  await page.locator('input[type=search]').fill('<img'); assert.equal(await page.locator('tbody img').count(),0); assert.ok((await page.locator('tbody').innerText()).includes('<img src=x onerror=alert(1)>'));
+  await page.locator('#field-quantity').fill('7');
+  assert.equal(await page.locator('dialog .language-button,dialog .theme-button').count(),0); assert.equal(await page.locator('#field-categoryId').inputValue(),'c2'); assert.equal(await page.locator('#field-supplierId').inputValue(),'s'); assert.equal(await page.locator('#field-quantity').inputValue(),'7');
+  await page.locator('dialog form [type=submit]').click();
+  await page.locator('.filters input[type=search]').fill('<img'); assert.equal(await page.locator('tbody img').count(),0); assert.ok((await page.locator('tbody').innerText()).includes('<img src=x onerror=alert(1)>'));
   await page.locator('tbody button').first().click(); await page.locator('#field-quantity').fill('8'); await page.locator('dialog form [type=submit]').click();
   await page.reload(); assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).materials.at(-1).quantity,key),8);
-  await page.locator('input[type=search]').fill('<img'); await page.locator('tbody button').last().click(); await page.locator('.confirm-dialog .primary').click();
+  await page.locator('.filters input[type=search]').fill('<img'); await page.locator('tbody button').last().click(); await page.locator('.confirm-dialog .primary').click();
  });
  await check('referenced category deletion is blocked',async()=>{await page.locator('nav [data-page="categories"]').click();await page.locator('tbody tr').first().locator('button').last().click();assert.ok(await page.locator('[role=alert]').first().isVisible());assert.equal(await page.locator('.confirm-dialog').isVisible(),false);});
  await check('native dialog focus containment and Escape restoration',async()=>{
@@ -94,8 +100,8 @@ try {
  await check('mobile navigation toggles with keyboard and closes on selection',async()=>{
   await page.setViewportSize({width:360,height:900});await page.locator('.menu-button').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('.sidebar').isVisible(),true);await page.locator('nav [data-page="settings"]').click();assert.equal(await page.locator('.sidebar').isVisible(),false);
  });
- await check('all pages in both languages and themes at 360 / 768 / 1440 px',async()=>{
-  for(const width of [360,768,1440]) for(const lang of ['en','ps']) for(const dark of [false,true]){
+ await check('all pages in both languages and themes at 320 / 375 / 390 / 428 / 768 / 1024 / 1440 px',async()=>{
+  for(const width of [320,375,390,428,768,1024,1440]) for(const lang of ['en','ps']) for(const dark of [false,true]){
    await page.setViewportSize({width,height:1000});await page.evaluate(prefs=>localStorage.setItem('university_it_preferences',JSON.stringify(prefs)),{lang,dark});await page.goto(base+'/#dashboard');await page.reload();
    for(const route of ['dashboard','materials','categories','suppliers','reports','backup','settings']){
     await page.goto(base+'/#'+route);await page.locator('h1').waitFor();assert.equal(await page.locator('html').getAttribute('dir'),lang==='ps'?'rtl':'ltr');
@@ -125,7 +131,7 @@ try {
   }
  });
  assert.deepEqual(errors,[]);assert.deepEqual(failedRequests,[]);checks.push('no browser console, page errors or failed resource requests');
- await writeFile('tests/artifacts/browser-results.json',JSON.stringify({browser:browser.version(),base,checks,errors,failedRequests},null,2));
- console.log(`${checks.length} browser checks passed`);
+ await writeFile('tests/artifacts/browser-results.json',JSON.stringify({browser:browser.version(),base,checks,skipped,errors,failedRequests},null,2));
+ console.log(`${checks.length} browser checks passed; ${skipped.length} skipped`);
 } finally { await browser.close(); }
 

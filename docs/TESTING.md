@@ -1,4 +1,24 @@
-# Verification — 11 October 2026
+# Current verification — 17 October 2026
+
+The in-place modernization passes **54 automated tests** and **59 browser checks**. Two legacy local-file checks are explicitly skipped by this managed Chromium environment because it blocks `file://` navigation. There are no remaining failing application checks. See the [modernization report](MODERNIZATION-REPORT.md) for the exact coverage, modified files and limits. The historical report below predates authenticated hosting and this redesign.
+
+Run automated tests with `npm test`. No frontend build or new dependency installation is required.
+
+Run the browser suites with an existing Playwright installation and browser, using the isolated fixture runner:
+
+```sh
+node tests/helpers/disposable-browser.mjs tests/browser.mjs tests/qa-browser.mjs tests/auth-browser.mjs tests/stock-print-browser.mjs tests/redesign-browser.mjs tests/redesign-edge-browser.mjs
+```
+
+Use `PLAYWRIGHT_MODULE` and `BROWSER_CHANNEL` to select the installed runtime. In the current managed environment the pre-existing wrapper is `/workspace/.inventory-cloud/playwright.cjs`, which selects installed Chromium. It is an environment-provided tool, not an application dependency. The command used here prefixes the command above with `PLAYWRIGHT_MODULE=/workspace/.inventory-cloud/playwright.cjs`.
+
+The fixture runner uses the real application authentication routes with an isolated test admin and in-memory session store. It never uses staff credentials or the production PostgreSQL database. Each suite opens disposable browser contexts. For live database readiness run `npm run check:db` in the existing configured environment. This workspace lacks `PGDATABASE`, so that check could not connect here.
+
+The current responsive matrix is 7 sections × 7 widths (320/375/390/428/768/1024/1440) × 2 languages × 2 themes = **196 combinations**. Selected browser contrast checks, native-dialog focus, Settings-only preferences/logout, stock deductions, JSON restore/recovery, print media and search updates pass. Generated evidence is in `tests/artifacts/` (ignored by Git); it contains synthetic fixture data.
+
+---
+
+# Historical verification — 11 October 2026
 
 ## Executed commands and results
 
