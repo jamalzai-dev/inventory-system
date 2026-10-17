@@ -42,7 +42,7 @@ try {
   });
   await check('desktop and mobile login layouts work in light and dark themes', async () => {
     await page.reload();
-    for (const colorScheme of ['light', 'dark']) for (const width of [360, 768, 1440]) {
+    for (const colorScheme of ['light', 'dark']) for (const width of [320, 375, 390, 428, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 }); await page.emulateMedia({ colorScheme });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.screenshot({ path: `tests/artifacts/login-${colorScheme}-${width}.png`, fullPage: true });
@@ -75,7 +75,9 @@ try {
     await page.evaluate(() => { const form = document.querySelector('form'); form.requestSubmit(); form.requestSubmit(); });
     await page.waitForURL(base + '/'); await page.locator('.sidebar').waitFor();
     assert.equal(submissions, 1);
-    assert.equal(await page.getByRole('button', { name: 'Sign out', exact: true }).count(), 1);
+    assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Sign out', exact: true }).count(), 0);
+    await page.locator('nav [data-page=settings]').click();
+    assert.equal(await page.locator('.settings').getByRole('button', { name: 'Sign out', exact: true }).count(), 1);
     assert.equal((await context.request.get(base + '/api/auth/session')).status(), 200);
   });
   await check('sign-out blocks subsequent pages and API requests without clearing local inventory', async () => {

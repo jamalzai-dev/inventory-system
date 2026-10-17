@@ -10,7 +10,7 @@ test('public login assets load while pages, modules and APIs require authenticat
   const fixture = await startTestServer(); t.after(fixture.close);
   const client = testClient(fixture.url);
   for (const path of ['/login', '/login/login.css', '/login/login.js']) assert.equal((await client.request(path)).status, 200, path);
-  for (const path of ['/', '/index.html', '/products.html', '/app/main.js', '/app/styles.css', '/assets/inventory.svg']) {
+  for (const path of ['/', '/index.html', '/products.html', '/app/main.js', '/app/styles.css', '/app/search.js', '/app/dashboard.js', '/app/icons.js', '/assets/inventory.svg']) {
     const response = await client.request(path); assert.equal(response.status, 302, path); assert.equal(response.headers.get('location'), '/login');
   }
   for (const path of ['/api/auth/session', '/api/materials']) assert.equal((await client.request(path)).status, 401);

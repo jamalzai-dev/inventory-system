@@ -10,7 +10,7 @@ Use Node.js 22 or later. First complete the [authentication setup](docs/AUTHENTI
 npm start
 ```
 
-Open **http://127.0.0.1:8080** and sign in. Use **Sign out** in the header to end the session. Keep the same browser and origin to retain access to your local inventory. Stop the server with Ctrl+C. Do not open index.html directly: the application uses ES modules.
+Open **http://127.0.0.1:8080** and sign in. Use **Settings → Sign out** to end the session. Keep the same browser and origin to retain access to your local inventory. Stop the server with Ctrl+C. Do not open index.html directly: the application uses ES modules.
 
 If port 8080 is occupied, choose another port (PowerShell):
 
@@ -27,7 +27,9 @@ The server always binds to `127.0.0.1`; `PORT=0` selects an available port and p
 
 - Materials, categories and suppliers: add, edit, search and safely delete.
 - Stock quantities, reorder levels, equipment condition, location, responsible person, serial, supplier, AFN price, purchase date and notes.
-- Dashboard, stock/category/value reports and localized printing.
+- Record-based dashboard cards, category/stock charts, filtered inventory preview and context-preserving See All.
+- Persistent global inventory search with keyboard navigation and grouped material/category/supplier results.
+- Stock/category/value reports and localized printing.
 - English/Pashto, LTR/RTL, persistent light/dark themes, responsive tables and keyboard-accessible forms/dialogs.
 - Validated JSON restore with preview and confirmation; recovery snapshot before each inventory change; raw archive export.
 - Safe read-only inspection of legacy products, orders, adjustments and activity logs.
@@ -44,6 +46,7 @@ The manifest and an unregistered service-worker draft prepare for future PWA wor
 - [Migration and recovery](docs/MIGRATION.md)
 - [LAN/backend and PWA plan](docs/DEPLOYMENT.md)
 - [Changed files and fixes](docs/CHANGES.md)
+- [Modernization report and verification limits](docs/MODERNIZATION-REPORT.md)
 - [Test results and commands](docs/TESTING.md)
 
 ## PostgreSQL connection setup (Step 1)

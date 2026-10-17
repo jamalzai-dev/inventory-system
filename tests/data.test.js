@@ -66,7 +66,14 @@ test('stale writers cannot overwrite newer records or their snapshot', () => {
   assert.throws(()=>b.save(emptyState()),/staleData/); assert.equal(JSON.parse(storage.getItem(KEY)).materials.length,1);
 });
 test('both language dictionaries have complete, nonempty entries', () => {
-  for (const [key,pair] of Object.entries(messages)) { assert.equal(pair.length,2); assert.ok(pair.every(x=>typeof x==='string'&&x.length)); setLanguage('ps'); assert.equal(t(key),pair[1].replace('{count}','')); }
+  for (const [key,pair] of Object.entries(messages)) {
+    assert.equal(pair.length,2);
+    assert.ok(pair.every(x=>typeof x==='string'&&x.length));
+    const placeholders = value => [...value.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();
+    assert.deepEqual(placeholders(pair[0]), placeholders(pair[1]), `${key} placeholders differ by language`);
+    setLanguage('ps');
+    assert.equal(t(key),pair[1].replace(/\{\w+\}/g,''));
+  }
   setLanguage('en');
 });
 test('legacy seed and write entry points cannot overwrite records', () => {
